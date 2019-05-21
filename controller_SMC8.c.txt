@@ -1,0 +1,249 @@
+
+#include  <math.h>
+#include "stabilizer.h"
+#include "stabilizer_types.h"
+#include "stdlib.h"
+
+#include "sensfusion6.h"
+
+#include "SMC.h"
+#include "log.h"
+#include "param.h"
+
+#define ATTITUDE_UPDATE_DT    (float)(1.0f/ATTITUDE_RATE)
+#define POSITION_UPDATE_DT    (float)(1.0f/POSITION_RATE)
+
+#define degtrad (float)(3.1415926f/180.0f)
+
+
+static float c2z =4.0f;
+static float c2phi =4.0f;
+static float c2th =4.0f;
+static float c2psi =4.0f;
+static float c1z =4.0f;
+static float c1phi= 4.0f;
+static float c1th =4.0f;
+static float c1psi =4.0f;
+static float c2x =4.0f;
+static float c2y =4.0f;
+static float c1x =4.0f;
+static float c1y =4.0f;
+
+
+static float betaz =50.0f;
+static float betaphi= 100.0f;
+static float betath =100.0f;
+static float betapsi =100.0f;
+
+
+static SMCObject SMC;
+void controllerSMCInit()
+{
+	SMCInit(SMC);
+}
+
+bool controllerSMCTest(void)
+{
+  bool pass = true;
+
+  return pass;
+}
+
+void controllerSMC(control_t *control, setpoint_t *setpoint,
+                                         const sensorData_t *sensors,
+                                         const state_t *state,
+                                         const uint32_t tick)
+{
+	if(SMC.zd==0)//initial
+	{
+	SMC.x0=state->position.x;//origin
+	SMC.y0=state->position.y;
+	SMC.xd=SMC.x0;           //default hover at origin
+	SMC.yd=SMC.y0;
+	SMC.psid=state->attitude.yaw*degtrad;//do not turn around
+	}
+    if (setpoint->mode.z == modeAbs)
+    {
+        //position
+        if (RATE_DO_EXECUTE(POSITION_RATE, tick))
+        {
+        	SMC.zd=setpoint->position.z;
+            if (setpoint->mode.x == modeAbs) SMC.xd=setpoint->position.x+SMC.x0;
+            if (setpoint->mode.y == modeAbs) SMC.yd=setpoint->position.y+SMC.y0;
+
+
+			SMC.z=state->position.z;
+			SMC.dz=constr(state->velocity.z,0.01f);
+			//SMC.zd=setpoint->position.z;
+			SMC.a1z=constr(SMC.z-SMC.zd,0.01f);
+			SMC.a2z=SMC.dz;
+			//SMC.sz=SMC.zz-SMC.dz;
+			//SMC.ddz=-kz*SMC.sz-betaz*sat(0.5f,SMC.sz)-ipxlz*pq(SMC.sz,pz0,qz0);
+			SMC.vz=-c2z*pq(fabs(SMC.a2z),alpha2z,alpha2z1)*sign(SMC.a2z)
+					-c1z*pq(fabs(SMC.a1z),alpha1z,alpha1z1)*sign(SMC.a1z);//-SMC.ddz;
+
+			SMC.x=state->position.x;
+			SMC.dx=constr(state->velocity.x,0.01f);
+			//SMC.xd=setpoint->position.x;
+			SMC.a1x=constr(SMC.x-SMC.xd,0.01f);
+			SMC.a2x=SMC.dx;
+			//SMC.sx=SMC.zx-SMC.dx;
+			//SMC.ddx=-kx*SMC.sx-betax*sat(0.5f,SMC.sx)-ipxlx*pq(SMC.sx,px0,qx0);
+			SMC.vx=-c2x*pq(fabs(SMC.a2x),alpha2x,alpha2x1)*sign(SMC.a2x)
+					-c1x*pq(fabs(SMC.a1x),alpha1x,alpha1x1)*sign(SMC.a1x);//-SMC.ddx;
+
+			SMC.y=state->position.y;
+			SMC.dy=constr(state->velocity.y,0.01f);
+			//SMC.yd=setpoint->position.y;
+			SMC.a1y=constr(SMC.y-SMC.yd,0.01f);
+			SMC.a2y=SMC.dy;
+			//SMC.sy=SMC.zy-SMC.dy;
+			//SMC.ddy=-ky*SMC.sy-betay*sat(0.5f,SMC.sy)-ipxly*pq(SMC.sy,py0,qy0);
+			SMC.vy=-c2y*pq(fabs(SMC.a2y),alpha2y,alpha2y1)*sign(SMC.a2y)
+					-c1y*pq(fabs(SMC.a1y),alpha1y,alpha1y1)*sign(SMC.a1y);//-SMC.ddy;
+
+	    	SMC.phi=state->attitude.roll*degtrad;
+	    	SMC.th=-state->attitude.pitch*degtrad;
+			SMC.u1=m*(SMC.vz+g)/cosf(SMC.phi)/cosf(SMC.th);
+			SMC.u1=constrainf(SMC.u1,0.6f,0.2f);
+
+			//float temp1=(SMC.vx*sinf(SMC.psi)-SMC.vy*cosf(SMC.psi))*m/SMC.u1;
+			float temp1=-SMC.vy*m/SMC.u1;
+		    //20¶È
+		    temp1=constrainf(temp1,0.342f,-0.342f);
+			//(temp1>0.342)*0.342+(temp1<-0.342)*(-0.342)+(temp1<=0.342 && temp1>=-0.342)*temp1;
+		    SMC.phid=asinf(temp1);
+		    //float temp3=(vx*cosf(psid)+vy*sinf(psid))/(u1+g);
+		    float temp2=SMC.vx/(SMC.u1+g);
+		    //20¶È
+		    temp2=constrainf(temp2,0.364f,-0.364f);
+			//(temp3>0.364)*0.364+(temp3<-0.364)*(-0.364)+(temp3<=0.364 && temp3>=-0.364)*temp3;
+		    SMC.thd=atanf(temp2);//asinf(temp4);
+
+
+        }
+		//angle
+		if (RATE_DO_EXECUTE(ATTITUDE_RATE, tick))
+		{
+
+			SMC.phi=state->attitude.roll*degtrad;
+			SMC.th=-state->attitude.pitch*degtrad;
+			SMC.psi=state->attitude.yaw*degtrad;
+			SMC.dphi=sensors->gyro.x*degtrad;
+			SMC.dth=sensors->gyro.y*degtrad;
+			SMC.dpsi=sensors->gyro.z*degtrad;
+			
+			SMC.a1phi=SMC.phi-SMC.phid;
+			SMC.a1th=SMC.th-SMC.thd;
+			SMC.a1psi=SMC.psi-SMC.psid;
+
+			SMC.sphi=SMC.zphi-SMC.dphi;
+			SMC.ddphi=-kphi*SMC.sphi-betaphi*sat(0.5f,SMC.sphi)-ipxlphi*pq(SMC.sphi,pphi0,qphi0);
+			SMC.vphi=(-SMC.dth*SMC.dpsi*(Iyy-Izz)/Ixx
+								-c2phi*pq(fabs(SMC.dphi),alpha2phi,alpha2phi1)*sign(SMC.dphi)
+								-c1phi*pq(fabs(SMC.a1phi),alpha1phi,alpha1phi1)*sign(SMC.a1phi)//)*Ixx/l;
+								-SMC.ddphi)*Ixx/l;
+			SMC.sth=SMC.zth-SMC.dth;
+			SMC.ddth=-kth*SMC.sth-betath*sat(0.5f,SMC.sth)-ipxlth*pq(SMC.sth,pth0,qth0);
+			SMC.vth=(-SMC.dphi*SMC.dpsi*(Izz-Ixx)/Iyy
+								-c2th*pq(fabs(SMC.dth),alpha2th,alpha2th1)*sign(SMC.dth)
+								-c1th*pq(fabs(SMC.a1th),alpha1th,alpha1th1)*sign(SMC.a1th)//)*Iyy/l;
+								-SMC.ddth)*Iyy/l;
+
+			SMC.spsi=SMC.zpsi-SMC.dpsi;
+			SMC.ddpsi=-kpsi*SMC.spsi-betapsi*sat(0.5f,SMC.spsi)-ipxlpsi*pq(SMC.spsi,ppsi0,qpsi0);
+			SMC.vpsi=(-SMC.dth*SMC.dphi*(Ixx-Iyy)/Izz
+								-c2psi*pq(fabs(SMC.dpsi),alpha2psi,alpha2psi1)*sign(SMC.dpsi)
+								-c1psi*pq(fabs(SMC.a1psi),alpha1psi,alpha1psi1)*sign(SMC.a1psi)//)*Izz;
+								-SMC.ddpsi)*Izz;
+
+			SMC.vphi=constrainf(SMC.vphi,0.002f,-0.002f);
+			SMC.vth=constrainf(SMC.vth,0.002f,-0.002f);
+			SMC.vpsi=constrainf(SMC.vpsi,0.0004f,-0.0004f);
+
+			//F
+			SMC.F1=0.25f*(SMC.u1-30.744f*SMC.vth-30.744f*SMC.vphi-167.785f*SMC.vpsi);
+			SMC.F2=0.25f*(SMC.u1+30.744f*SMC.vth-30.744f*SMC.vphi+167.785f*SMC.vpsi);
+			SMC.F3=0.25f*(SMC.u1+30.744f*SMC.vth+30.744f*SMC.vphi-167.785f*SMC.vpsi);
+			SMC.F4=0.25f*(SMC.u1-30.744f*SMC.vth+30.744f*SMC.vphi+167.785f*SMC.vpsi);
+
+			SMC.F1=constrainf(SMC.F1,0.15f,0.05f);
+			SMC.F2=constrainf(SMC.F2,0.15f,0.05f);
+			SMC.F3=constrainf(SMC.F3,0.15f,0.05f);
+			SMC.F4=constrainf(SMC.F4,0.15f,0.05f);
+
+			//SMC.u1=SMC.F1+SMC.F2+SMC.F3+SMC.F4;
+			SMC.vth=l/1.414f*(-SMC.F1+SMC.F2+SMC.F3-SMC.F4);
+			SMC.vphi=l/1.414f*(-SMC.F1-SMC.F2+SMC.F3+SMC.F4);
+			SMC.vpsi=-0.00596f*(SMC.F1-SMC.F2+SMC.F3-SMC.F4);
+
+			//SMC.zz=SMC.zz+(-kz*SMC.sz-betaz*sat(0.5f,SMC.sz)-ipxlz*pq(SMC.sz,pz0,qz0)
+				//				+SMC.u1*cosf(SMC.phi)*cosf(SMC.th)/m-g)*ATTITUDE_UPDATE_DT;
+			SMC.zphi=SMC.zphi+(-kphi*SMC.sphi-betaphi*sat(0.5f,SMC.sphi)-ipxlphi*pq(SMC.sphi,pphi0,qphi0)
+								+SMC.vphi*l/Ixx)*ATTITUDE_UPDATE_DT;
+			SMC.zth=SMC.zth+(-kth*SMC.sth-betath*sat(0.5f,SMC.sth)-ipxlth*pq(SMC.sth,pth0,qth0)
+											+SMC.vth*l/Iyy)*ATTITUDE_UPDATE_DT;
+			SMC.zpsi=SMC.zpsi+(-kpsi*SMC.spsi-betapsi*sat(0.5f,SMC.spsi)-ipxlpsi*pq(SMC.spsi,ppsi0,qpsi0)
+											+SMC.vpsi/Izz)*ATTITUDE_UPDATE_DT;
+			//update control
+			control->thrust =(int)(50000.0f*(sqrtf(0.235f+18.78f*SMC.F1)-0.485f));
+			control->roll=(int)(50000.0f*(sqrtf(0.235f+18.78f*SMC.F2)-0.485f));
+			control->pitch=(int)(50000.0f*(sqrtf(0.235f+18.78f*SMC.F3)-0.485f));
+			control->yaw=(int)(50000.0f*(sqrtf(0.235f+18.78f*SMC.F4)-0.485f));
+
+		}
+
+
+    }
+
+    if (setpoint->mode.z == modeDisable)
+    {
+          control->thrust = 0;
+          control->roll = 0;
+          control->pitch = 0;
+          control->yaw = 0;
+          SMCReset(SMC);
+    }
+
+}
+PARAM_GROUP_START(ctrlSMC)
+PARAM_ADD(PARAM_FLOAT, c2z, &c2z)
+PARAM_ADD(PARAM_FLOAT, c2phi, &c2phi)
+PARAM_ADD(PARAM_FLOAT, c2th, &c2th)
+PARAM_ADD(PARAM_FLOAT, c2psi, &c2psi)
+PARAM_ADD(PARAM_FLOAT, c1z, &c1z)
+PARAM_ADD(PARAM_FLOAT, c1phi, &c1phi)
+PARAM_ADD(PARAM_FLOAT, c1th, &c1th)
+PARAM_ADD(PARAM_FLOAT, c1psi, &c1psi)
+PARAM_ADD(PARAM_FLOAT, c2x, &c2x)
+PARAM_ADD(PARAM_FLOAT, c2y, &c2y)
+PARAM_ADD(PARAM_FLOAT, c1x, &c1x)
+PARAM_ADD(PARAM_FLOAT, c1y, &c1y)
+PARAM_ADD(PARAM_FLOAT, betaz, &betaz)
+PARAM_ADD(PARAM_FLOAT, betaphi, &betaphi)
+PARAM_ADD(PARAM_FLOAT, betath, &betath)
+PARAM_ADD(PARAM_FLOAT, betapsi, &betapsi)
+PARAM_GROUP_STOP(ctrlSMC)
+
+LOG_GROUP_START(ctrlSMC)
+LOG_ADD(LOG_FLOAT, vz, &SMC.vz)
+LOG_ADD(LOG_FLOAT, vx, &SMC.vx)
+LOG_ADD(LOG_FLOAT, vy, &SMC.vy)
+LOG_ADD(LOG_FLOAT, xd, &SMC.xd)
+LOG_ADD(LOG_FLOAT, yd, &SMC.yd)
+LOG_ADD(LOG_FLOAT, zd, &SMC.zd)
+LOG_ADD(LOG_FLOAT, phid, &SMC.phid)
+LOG_ADD(LOG_FLOAT, thd, &SMC.thd)
+LOG_ADD(LOG_FLOAT, psid, &SMC.psid)
+LOG_ADD(LOG_FLOAT, u1, &SMC.u1)
+LOG_ADD(LOG_FLOAT, F1, &SMC.F1)
+LOG_ADD(LOG_FLOAT, F2, &SMC.F2)
+LOG_ADD(LOG_FLOAT, F3, &SMC.F3)
+LOG_ADD(LOG_FLOAT, F4, &SMC.F4)
+//LOG_ADD(LOG_FLOAT, ddphi, &SMC.ddphi)
+//LOG_ADD(LOG_FLOAT, ddth, &SMC.ddth)
+//LOG_ADD(LOG_FLOAT, ddpsi, &SMC.ddpsi)
+//LOG_ADD(LOG_FLOAT, ddz, &SMC.ddz)
+LOG_GROUP_STOP(ctrlSMC)
+
+

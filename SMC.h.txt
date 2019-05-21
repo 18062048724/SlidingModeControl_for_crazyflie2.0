@@ -1,0 +1,203 @@
+/**
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
+ * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
+ * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
+ *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
+ *
+ * Crazyflie control firmware
+ *
+ * Copyright (C) 2011-2012 Bitcraze AB
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, in version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ * SMC.h - implementation of the SMC regulator
+ */
+#ifndef SMC_H_
+#define SMC_H_
+
+//#include <stdbool.h>
+#include "math.h"
+#include "filter.h"
+#include "stabilizer_types.h"
+#define m 0.03f
+#define g 9.81f
+#define l 0.046f
+#define Ixx 16.655602e-6f
+#define Iyy 16.571710e-6f
+#define Izz 29.261652e-6f
+
+#define kx 25.0f
+#define ky 25.0f
+#define kz 25.0f
+#define kphi 25.0f
+#define kth 25.0f
+#define kpsi 25.0f
+#define betax 50.0f
+#define betay 50.0f
+//#define betaz 50.0f
+//#define betaphi 100.0f
+//#define betath 100.0f
+//#define betapsi 100.0f
+#define ipxlx 0.5f
+#define ipxly 0.5f
+#define ipxlz 0.5f
+#define ipxlphi 0.5f
+#define ipxlth 0.5f
+#define ipxlpsi 0.5f
+#define px0 5.0f
+#define py0 5.0f
+#define pz0 5.0f
+#define pphi0 5.0f
+#define pth0 5.0f
+#define ppsi0 5.0f
+#define qx0 9.0f
+#define qy0 9.0f
+#define qz0 9.0f
+#define qphi0 9.0f
+#define qth0 9.0f
+#define qpsi0 9.0f
+/*
+#define c2x 4.0f
+#define c2y 4.0f
+#define c2z 4.0f
+#define c2phi 4.0f
+#define c2th 4.0f
+#define c2psi 4.0f
+#define c1x 4.0f
+#define c1y 4.0f
+#define c1z 4.0f
+#define c1phi 4.0f
+#define c1th 4.0f
+#define c1psi 4.0f
+*/
+#define alpha1z 4.0f
+#define alpha1x 4.0f
+#define alpha1y 4.0f
+#define alpha1phi 4.0f
+#define alpha1th 4.0f
+#define alpha1psi 4.0f
+#define alpha1z1 6.0f
+#define alpha1x1 6.0f
+#define alpha1y1 6.0f
+#define alpha1phi1 6.0f
+#define alpha1th1 6.0f
+#define alpha1psi1 6.0f
+
+#define alpha2z 4.0f
+#define alpha2x 4.0f
+#define alpha2y 4.0f
+#define alpha2phi 4.0f
+#define alpha2th 4.0f
+#define alpha2psi 4.0f
+#define alpha2z1 5.0f
+#define alpha2x1 5.0f
+#define alpha2y1 5.0f
+#define alpha2phi1 5.0f
+#define alpha2th1 5.0f
+#define alpha2psi1 5.0f
+
+typedef struct
+{
+  float sz;
+  float zz;
+  float a2z;
+  float a1z;
+  float ddz;
+  float vz;
+
+  float sx;
+  float zx;
+  float a2x;
+  float a1x;
+  float ddx;
+  float vx;
+
+  float sy;
+  float zy;
+  float a2y;
+  float a1y;
+  float ddy;
+  float vy;
+
+  float sphi;
+  float zphi;
+  float a2phi;
+  float a1phi;
+  float ddphi;
+  float vphi;
+
+  float sth;
+  float zth;
+  float a2th;
+  float a1th;
+  float ddth;
+  float vth;
+
+  float spsi;
+  float zpsi;
+  float a2psi;
+  float a1psi;
+  float ddpsi;
+  float vpsi;
+
+  float z;
+  float x;
+  float y;
+  float phi;
+  float th;
+  float psi;
+
+
+  float dz;
+  float dx;
+  float dy;
+  float dphi;
+  float dth;
+  float dpsi;
+
+  float zd;
+  float xd;
+  float yd;
+  float phid;
+  float thd;
+  float psid;
+
+
+
+  float u1;
+
+
+  float F1;
+  float F2;
+  float F3;
+  float F4;
+
+  float x0;
+  float y0;
+
+
+} SMCObject;
+
+ void SMCInit(SMCObject SMC);
+void SMCReset(SMCObject SMC);
+
+ float sat(float y,float x);
+ float sign(float x);
+ float pq(float x,float y,float z);
+ float constrainf(float x,float y,float z);
+ float constr(float x,float y);
+
+
+#endif /* SMC_H_ */

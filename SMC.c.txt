@@ -1,0 +1,71 @@
+
+
+#include "SMC.h"
+#include "num.h"
+#include <math.h>
+
+void SMCInit(SMCObject SMC)
+{
+	  SMC.zd=0;
+	  SMC.zphi=0;
+	  SMC.zth=0;
+	  SMC.zpsi=0;
+	  SMC.zx=0;
+	  SMC.zy=0;
+	  SMC.zz=0;
+	  SMC.x0=0;
+	  SMC.y0=0;
+
+
+}
+
+void SMCReset(SMCObject SMC)
+{
+	SMCInit(SMC);
+}
+
+
+float sat(float y,float x)
+ {
+	 if(x>=y) return 1.0;
+
+	 else if(x<=-y) return -1.0;
+
+	 else return x/y;
+
+ }
+ float sign(float x)
+ {
+
+	 if(x>0) return 1.0;
+
+	 else if(x<0) return -1.0;
+
+	 else return x;
+
+ }
+ float pq(float x,float y,float z)
+ {
+	 float xx=0.0f;
+	 if(x>0.0f) xx=powf(x,y/z);
+	 else if(x<0.0f) xx=powf(-x,y/z);
+	 return xx;
+	 
+ }
+ float constrainf(float x,float y,float z)
+ 	 {
+
+ 		if (x>y)
+ 			x=y;
+ 		if (x<z)
+ 			x=z;
+		return x;
+
+ 	 }
+ float constr(float x,float y)
+ 	 {
+ 		if (x<y && x>-y) x=0.0f;
+
+		return x;
+
+ 	 }
